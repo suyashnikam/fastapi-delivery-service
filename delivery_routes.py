@@ -9,7 +9,7 @@ import schemas
 import database
 import requests
 
-delivery_router = APIRouter(prefix="/delivery", tags=["Delivery"])
+delivery_router = APIRouter(prefix="/api/v1/delivery", tags=["Delivery"])
 
 
 # --- Utility functions ---
@@ -69,8 +69,6 @@ async def update_status_by_delivery_person(
     if role != "DELIVERY":
         raise HTTPException(status_code=403, detail="Only Delivery Person can update the status")
 
-
-
     # Find delivery and verify ownership
     delivery = db.query(models.Delivery).filter(
         models.Delivery.delivery_uid == update_data.delivery_uid,
@@ -90,21 +88,25 @@ async def update_status_by_delivery_person(
     return delivery
 
 
-@delivery_router.get("/{delivery_id}", response_model=schemas.DeliveryOut)
-async def get_delivery_by_id(
-    delivery_id: int,
+@delivery_router.get("/{identifier}", response_model=schemas.DeliveryOut)
+async def get_delivery(
+    identifier: str,
     db: Session = Depends(database.get_db),
     Authorize: AuthJWT = Depends()
 ):
     get_user_role(Authorize)
 
-    delivery = db.query(models.Delivery).filter(models.Delivery.id == delivery_id).first()
+    if identifier.isdigit():
+        delivery = db.query(models.Delivery).filter(models.Delivery.id == int(identifier)).first()
+    else:
+        delivery = db.query(models.Delivery).filter(models.Delivery.delivery_uid == identifier).first()
+
     if not delivery:
         raise HTTPException(status_code=404, detail="Delivery not found")
 
     return delivery
 
-
+##get all deliveries
 @delivery_router.get("/", response_model=List[schemas.DeliveryOut])
 async def get_all_deliveries(
     db: Session = Depends(database.get_db),
@@ -117,7 +119,7 @@ async def get_all_deliveries(
 
     return db.query(models.Delivery).all()
 
-
+##track your order by order_uid
 @delivery_router.get("/order/{order_uid}", response_model=schemas.DeliveryOut)
 async def get_delivery_by_order_uid(
     order_uid: str,
@@ -152,7 +154,7 @@ async def delete_delivery(
     db.commit()
     return {"detail": "Delivery deleted successfully"}
 
-
+##assing delivery person to delivery order
 @delivery_router.put("/assign", response_model=schemas.DeliveryOut)
 async def assign_delivery_person(
     assign_data: schemas.DeliveryAssignIn,
@@ -183,14 +185,14 @@ async def assign_delivery_person(
 
     # Step 3: Validate delivery person
     auth_service_url = os.getenv("USER_SERVICE_BASE_URL", "http://127.0.0.1:8001")
-    validate_url = f"{auth_service_url}/auth/validate-user/{assign_data.delivery_person_id}"
+    validate_url = f"{auth_service_url}/api/v1/auth/validate-user/{assign_data.delivery_person_id}"
 
     headers = {"Authorization": f"{Authorization}"}
 
     try:
         response = requests.get(validate_url, headers=headers, timeout=5)
         print(response)
-        if response.status_code != 200 or not response.json().get("is_valid", False):
+        if response.status_code != 200 or not response.json().get("is_valid_delivery_person", False):
             raise HTTPException(status_code=400, detail="Invalid or inactive delivery person")
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Auth service unavailable")
