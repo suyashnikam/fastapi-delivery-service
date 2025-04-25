@@ -45,7 +45,7 @@ class DeliveryOut(BaseModel):
     order_uid: str
     delivery_person_id: Optional[int]
     status: DeliveryStatus
-    assigned_at: datetime
+    assigned_at: Optional[datetime]
     updated_at: datetime
 
     class Config:
